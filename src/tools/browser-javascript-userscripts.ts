@@ -1,6 +1,6 @@
 import { html, type TemplateResult } from "@mariozechner/mini-lit";
 import type { AgentTool, ToolResultMessage } from "@mariozechner/pi-ai";
-import { type Attachment, registerToolRenderer, type ToolRenderer } from "@mariozechner/pi-web-ui";
+import { type Attachment, i18n, registerToolRenderer, type ToolRenderer } from "@mariozechner/pi-web-ui";
 import { type Static, Type } from "@sinclair/typebox";
 import "@mariozechner/pi-web-ui"; // Ensure all components are registered
 
@@ -142,7 +142,7 @@ function securitySafeguards() {
 }
 
 // Wrapper function that executes user code - will be converted to string with .toString()
-async function wrapperFunction(userCode: string) {
+async function wrapperFunction() {
 	// Capture console output
 	const consoleOutput: Array<{ type: string; args: unknown[] }> = [];
 	const files: Array<{ fileName: string; content: string | Uint8Array; mimeType: string }> = [];
@@ -223,6 +223,7 @@ async function wrapperFunction(userCode: string) {
 
 		// Execute user code and capture the last expression value
 		// USER_CODE_PLACEHOLDER will be replaced with the actual async function containing user code
+		// @ts-expect-error
 		const userCodeFunc = USER_CODE_PLACEHOLDER;
 		const codePromise = userCodeFunc();
 
@@ -268,6 +269,7 @@ function buildWrapperCode(userCode: string, enableSafeguards: boolean): string {
 
 const browserJavaScriptSchema = Type.Object({
 	code: Type.String({ description: "JavaScript code to execute in the active browser tab" }),
+	title: Type.String({ description: "Brief description of what this code does (e.g., 'Extract page links', 'Get article text')" }),
 });
 
 export type BrowserJavaScriptToolResult = {
@@ -426,6 +428,33 @@ This ensures reliable execution.`,
 			if (!browser.userScripts) {
 				const chromeVersion = Number(navigator.userAgent.match(/(Chrome|Chromium)\/([0-9]+)/)?.[2]);
 				const isChrome = chromeVersion > 0;
+				const isFirefox = !isChrome;
+
+				// Firefox: Try to request userScripts permission if not granted
+				if (isFirefox && browser.permissions) {
+					try {
+						const hasPermission = await browser.permissions.contains({ permissions: ["userScripts"] });
+						if (!hasPermission) {
+							const granted = await browser.permissions.request({ permissions: ["userScripts"] });
+							if (!granted) {
+								return {
+									output: "Error: userScripts permission denied.\n\nThe userScripts permission is required to execute JavaScript code safely.\nPlease allow the permission when prompted.",
+									isError: true,
+									details: { files: [] },
+								};
+							}
+							// Permission was just granted, but API might not be available yet
+							// Return a message asking user to try again
+							return {
+								output: "✅ userScripts permission granted!\n\nPlease try your request again.",
+								isError: false,
+								details: { files: [] },
+							};
+						}
+					} catch {
+						// Permission request failed or not supported
+					}
+				}
 
 				let errorMessage = "Error: browser.userScripts API is not available.\n\n";
 
@@ -610,6 +639,7 @@ This ensures reliable execution.`,
 
 // Browser JavaScript renderer
 interface BrowserJavaScriptParams {
+	title: string;
 	code: string;
 }
 
@@ -625,11 +655,11 @@ interface BrowserJavaScriptResult {
 export const browserJavaScriptRenderer: ToolRenderer<BrowserJavaScriptParams, BrowserJavaScriptResult> = {
 	renderParams(params: BrowserJavaScriptParams, isStreaming?: boolean): TemplateResult {
 		if (isStreaming && (!params.code || params.code.length === 0)) {
-			return html`<div class="text-sm text-muted-foreground">Writing JavaScript code...</div>`;
+			return html`<span class="text-sm text-muted">${i18n("Writing JavaScript code...")}</span>`;
 		}
 
 		return html`
-			<div class="text-sm text-muted-foreground mb-2">Executing in active tab (userScripts API)</div>
+			<span class="text-sm text-muted">${params.title}</span>
 			<code-block .code=${params.code || ""} language="javascript"></code-block>
 		`;
 	},

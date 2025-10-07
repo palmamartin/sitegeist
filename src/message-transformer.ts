@@ -2,10 +2,80 @@ import type { Message } from "@mariozechner/pi-ai";
 import type { AppMessage } from "@mariozechner/pi-web-ui";
 import type { NavigationMessage } from "./messages/NavigationMessage.js";
 
+// Helper: Check if a message has toolCall blocks
+function hasToolCalls(msg: Message): boolean {
+	if (msg.role !== "assistant") return false;
+	return msg.content.some((block) => block.type === "toolCall");
+}
+
+// Helper: Get all toolCall IDs from an assistant message
+function getToolCallIds(msg: Message): Set<string> {
+	const ids = new Set<string>();
+	if (msg.role !== "assistant") return ids;
+
+	for (const block of msg.content) {
+		if (block.type === "toolCall") {
+			ids.add(block.id);
+		}
+	}
+	return ids;
+}
+
+// Helper: Check if a toolResult message matches the given tool call IDs
+function isToolResultFor(msg: Message, toolCallIds: Set<string>): boolean {
+	if (msg.role !== "toolResult") return false;
+	return toolCallIds.has(msg.toolCallId);
+}
+
+// Reorder messages so assistant tool calls are immediately followed by their tool results
+// This moves navigation and other user messages after the tool results
+function reorderMessages(messages: Message[]): Message[] {
+	const result: Message[] = [];
+	let i = 0;
+
+	while (i < messages.length) {
+		const msg = messages[i];
+
+		if (msg.role === "assistant" && hasToolCalls(msg)) {
+			// Found assistant with tool calls
+			result.push(msg);
+			i++;
+
+			// Collect tool call IDs from this assistant message
+			const toolCallIds = getToolCallIds(msg);
+
+			// Scan forward and collect messages until next assistant or end
+			const toolResultMessages: Message[] = [];
+			const otherMessages: Message[] = [];
+
+			while (i < messages.length && messages[i].role !== "assistant") {
+				const nextMsg = messages[i];
+
+				if (isToolResultFor(nextMsg, toolCallIds)) {
+					toolResultMessages.push(nextMsg);
+				} else {
+					otherMessages.push(nextMsg);
+				}
+				i++;
+			}
+
+			// Add tool result messages first, then other messages (like nav)
+			result.push(...toolResultMessages);
+			result.push(...otherMessages);
+		} else {
+			// Not an assistant with tool calls, just add it
+			result.push(msg);
+			i++;
+		}
+	}
+
+	return result;
+}
+
 // Custom message transformer for browser extension
 // Handles navigation messages and app-specific message types
 export function browserMessageTransformer(messages: AppMessage[]): Message[] {
-	return messages
+	const transformed = messages
 		.filter((m) => {
 			// Keep LLM-compatible messages + navigation messages
 			return m.role === "user" || m.role === "assistant" || m.role === "toolResult" || m.role === "navigation";
@@ -29,4 +99,7 @@ export function browserMessageTransformer(messages: AppMessage[]): Message[] {
 
 			return m as Message;
 		});
+
+	// Reorder to ensure tool calls and results are adjacent
+	return reorderMessages(transformed);
 }

@@ -1,24 +1,20 @@
-// Declare browser global for Firefox
-declare const browser: any;
+// Cross-browser API compatibility
+// @ts-expect-error - browser global exists in Firefox, chrome in Chrome
+const browserAPI: typeof chrome & typeof browser = (globalThis as any).browser || (globalThis as any).chrome;
 
-// Detect browser type
-const isFirefox = typeof browser !== "undefined" && typeof browser.runtime !== "undefined";
+const isFirefox = !!(globalThis as any).browser && !!(browserAPI as any).sidebarAction;
 
-// Open side panel/sidebar when extension icon is clicked
 if (isFirefox) {
-	// Firefox MV2: Use browserAction
-	if (browser.browserAction) {
-		browser.browserAction.onClicked.addListener(() => {
-			if (browser.sidebarAction) {
-				browser.sidebarAction.toggle();
-			}
-		});
-	}
+	// Firefox needs an `action` key in manifest.json
+	browserAPI.action?.onClicked.addListener(() => {
+		// Use open(), not toggle() - toggle() doesn't exist in Firefox
+		(browserAPI as any).sidebarAction.open();
+	});
 } else {
-	// Chrome MV3: Use action API
-	chrome.action.onClicked.addListener((tab: chrome.tabs.Tab) => {
-		if (tab.id && chrome.sidePanel) {
-			chrome.sidePanel.open({ tabId: tab.id });
+	// Chrome needs a side panel declared in the manifest
+	browserAPI.action.onClicked.addListener((tab: chrome.tabs.Tab) => {
+		if (tab.id && (browserAPI as any).sidePanel?.open) {
+			(browserAPI as any).sidePanel.open({ tabId: tab.id });
 		}
 	});
 }

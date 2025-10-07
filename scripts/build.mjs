@@ -60,11 +60,14 @@ const copyStatic = () => {
   const manifestDest = join(outDir, "manifest.json");
   copyFileSync(manifestSource, manifestDest);
 
-  // Copy all files from static/ directory
+  // Copy all files from static/ directory (except manifest files)
   const staticFiles = getStaticFiles();
   for (const relative of staticFiles) {
-    const source = join(packageRoot, relative);
     const filename = relative.replace("static/", "");
+    // Skip manifest files - we already copied the correct one above
+    if (filename.startsWith("manifest.")) continue;
+
+    const source = join(packageRoot, relative);
     const destination = join(outDir, filename);
     copyFileSync(source, destination);
   }

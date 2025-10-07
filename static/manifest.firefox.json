@@ -1,50 +1,31 @@
 {
   "manifest_version": 3,
   "name": "pi-ai",
-  "description": "Use @mariozechner/pi-ai to summarize and highlight the page you are reading.",
   "version": "0.5.43",
+  "description": "Use @mariozechner/pi-ai to summarize and highlight the page you are reading.",
+  "icons": { "16": "icon-16.png", "48": "icon-48.png", "128": "icon-128.png" },
+  "action": {
+    "default_title": "pi-ai",
+    "default_icon": "icon-48.png"
+  },
+  "sidebar_action": {
+    "default_title": "pi-ai",
+    "default_panel": "sidepanel.html",
+    "default_icon": "icon-48.png"
+  },
   "background": {
     "scripts": ["background.js"]
   },
-  "icons": {
-    "16": "icon-16.png",
-    "48": "icon-48.png",
-    "128": "icon-128.png"
-  },
-  "sidebar_action": {
-    "default_panel": "sidepanel.html",
-    "default_title": "pi-ai",
-    "default_icon": {
-      "16": "icon-16.png",
-      "48": "icon-48.png"
-    },
-    "open_at_install": false
-  },
-  "content_scripts": [
-    {
-      "matches": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"],
-      "js": ["content.js"],
-      "run_at": "document_idle",
-      "all_frames": false
-    }
-  ],
   "permissions": [
     "storage",
     "activeTab",
     "scripting"
   ],
-  "host_permissions": [
-    "https://*/*",
-    "http://localhost/*",
-    "http://127.0.0.1/*"
+  "optional_permissions": [
+    "userScripts"
   ],
-  "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'"
-  },
+  "host_permissions": ["<all_urls>"],
   "browser_specific_settings": {
-    "gecko": {
-      "id": "pi-reader@mariozechner.at",
-      "strict_min_version": "128.0"
-    }
+    "gecko": { "id": "pi-reader@mariozechner.at", "strict_min_version": "128.0" }
   }
 }
