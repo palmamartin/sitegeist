@@ -260,6 +260,32 @@ export class MemoriesIndexedDBBackend implements StorageBackend {
     });
   }
 
+  async clear(): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(this.storeName, 'readwrite');
+      const store = transaction.objectStore(this.storeName);
+      const request = store.clear();
+
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async has(key: string): Promise<boolean> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(this.storeName, 'readonly');
+      const store = transaction.objectStore(this.storeName);
+      const request = store.getKey(key);
+
+      request.onsuccess = () => resolve(request.result !== undefined);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
   // Efficient session-scoped operations using IDBKeyRange
   async getKeysInRange(sessionId: string): Promise<string[]> {
     if (!this.db) throw new Error('Database not initialized');
@@ -320,50 +346,67 @@ export class MemoriesIndexedDBBackend implements StorageBackend {
 
 **File:** `src/storage/app-storage.ts`
 
-Extend web-ui's AppStorage to add memories repository.
+Extend web-ui's `BaseAppStorage` following the existing pattern used for skills.
 
 ```typescript
-import { getAppStorage, type AppStorage } from "@mariozechner/pi-web-ui";
+import { AppStorage as BaseAppStorage, WebExtensionStorageBackend, SessionIndexedDBBackend, getAppStorage } from "@mariozechner/pi-web-ui";
 import { SkillsRepository } from "./skills-repository.js";
 import { MemoriesRepository } from "./memories-repository.js";
 import { MemoriesIndexedDBBackend } from "./memories-indexeddb-backend.js";
 
-export interface SitegeistStorage extends AppStorage {
-  skills: SkillsRepository;
-  memories: MemoriesRepository;
-}
+/**
+ * Extended AppStorage for Sitegeist with skills and memories repositories.
+ */
+export class SitegeistAppStorage extends BaseAppStorage {
+  readonly skills: SkillsRepository;
+  readonly memories: MemoriesRepository;
 
-let storage: SitegeistStorage | null = null;
+  constructor() {
+    // Initialize base AppStorage with web-ui repositories
+    super({
+      settings: new WebExtensionStorageBackend("settings"),
+      providerKeys: new WebExtensionStorageBackend("providerKeys"),
+      sessions: new SessionIndexedDBBackend("pi-extension-sessions"),
+    });
 
-export async function initSitegeistStorage(): Promise<SitegeistStorage> {
-  const baseStorage = await getAppStorage();
-  const backend = baseStorage.backend;
+    // Add Sitegeist-specific repositories
+    this.skills = new SkillsRepository(new WebExtensionStorageBackend("skills"));
 
-  // Initialize memories backend
-  const memoriesBackend = new MemoriesIndexedDBBackend();
-  await memoriesBackend.init();
-
-  storage = {
-    ...baseStorage,
-    skills: new SkillsRepository(backend),
-    memories: new MemoriesRepository(memoriesBackend),
-  };
-
-  return storage;
-}
-
-export function getSitegeistStorage(): SitegeistStorage {
-  if (!storage) {
-    throw new Error("Storage not initialized. Call initSitegeistStorage() first.");
+    // Initialize memories backend synchronously (IndexedDB init is async but constructor-safe)
+    const memoriesBackend = new MemoriesIndexedDBBackend();
+    memoriesBackend.init(); // Fire and forget - will be ready before first use
+    this.memories = new MemoriesRepository(memoriesBackend);
   }
-  return storage;
+
+  /**
+   * Override deleteSession to also clear memories for this session.
+   */
+  override async deleteSession(sessionId: string): Promise<void> {
+    // Delete session data first
+    await super.deleteSession(sessionId);
+
+    // Then delete all memories for this session
+    await this.memories.clear(sessionId);
+  }
+}
+
+/**
+ * Helper to get typed Sitegeist storage.
+ */
+export function getSitegeistStorage(): SitegeistAppStorage {
+  return getAppStorage() as SitegeistAppStorage;
 }
 ```
 
 **Usage in sidepanel initialization:**
 ```typescript
-// In src/sidepanel.ts (or wherever sidepanel initializes)
-await initSitegeistStorage();
+// In src/sidepanel.ts (matches existing pattern)
+import { setAppStorage } from "@mariozechner/pi-web-ui";
+import { SitegeistAppStorage } from "./storage/app-storage.js";
+
+// Create and register storage
+const storage = new SitegeistAppStorage();
+setAppStorage(storage);
 ```
 
 ### Message Protocol
@@ -655,32 +698,39 @@ const products = Array.from(document.querySelectorAll('.product'))
 
 Memories are part of a session's lifecycle and must be deleted when the session is deleted.
 
-**Where to integrate:**
+**Implementation:**
 
-Wherever sessions are deleted (session repository, user action, etc.), add memory cleanup:
+The `SitegeistAppStorage` class overrides `deleteSession()` to automatically clean up memories:
 
 ```typescript
-// In session deletion handler
-async function deleteSession(sessionId: string) {
-  const storage = getSitegeistStorage();
+// In src/storage/app-storage.ts (already shown above)
+export class SitegeistAppStorage extends BaseAppStorage {
+  // ...
 
-  // Delete session data (chat history, model state, etc.)
-  await storage.sessions.delete(sessionId);
+  /**
+   * Override deleteSession to also clear memories for this session.
+   */
+  override async deleteSession(sessionId: string): Promise<void> {
+    // Delete session data first
+    await super.deleteSession(sessionId);
 
-  // Delete all memories for this session
-  await storage.memories.clear(sessionId);
+    // Then delete all memories for this session
+    await this.memories.clear(sessionId);
+  }
 }
 ```
 
-**Performance:**
-- Uses efficient `IDBKeyRange` to find only keys for this session
-- Deletes all matching keys in single transaction via cursor
-- Scales well even with thousands of memory entries per session
+**How it works:**
+- When user deletes a session through the UI, `storage.deleteSession(id)` is called
+- This invokes the overridden method in `SitegeistAppStorage`
+- Session data is deleted first via `super.deleteSession()`
+- Then all memories for that session are deleted via `memories.clear()`
+- Uses efficient `IDBKeyRange` cursor to batch delete in single transaction
 
-**No separate cleanup needed:**
-- Memories don't need periodic cleanup - they're tied to session lifecycle
-- When session is deleted, memories are deleted
-- Session IDs are UUIDs, so no timestamp-based cleanup
+**No manual cleanup needed:**
+- Memories are automatically deleted when session is deleted
+- No periodic cleanup, no background jobs
+- Session IDs are UUIDs, not timestamps, so no expiration logic needed
 
 ## Tool Description
 
@@ -828,17 +878,27 @@ location.href = page2;  // results array is GONE
 ## Implementation Checklist
 
 - [ ] Create `src/storage/memories-indexeddb-backend.ts`
+  - Implements full `StorageBackend` interface (get, set, delete, keys, clear, has)
+  - Adds efficient session-scoped methods (getKeysInRange, deleteRange)
+  - Uses IDBKeyRange for performant prefix queries
 - [ ] Create `src/storage/memories-repository.ts`
-- [ ] Update `src/storage/app-storage.ts` to add `memories` field
-- [ ] Update `src/sidepanel.ts` to call `initSitegeistStorage()`
+  - Wraps backend with session-scoped operations
+  - Handles key prefixing (`${sessionId}_${key}`)
+- [ ] Update `src/storage/app-storage.ts`:
+  - Extend `BaseAppStorage` (not async init pattern)
+  - Add `memories: MemoriesRepository` field
+  - Override `deleteSession()` to also clear memories
+  - Follow existing pattern used for skills repository
+- [ ] Verify `src/sidepanel.ts` creates and registers storage:
+  - Should already have `new SitegeistAppStorage()` pattern
+  - No changes needed if following existing code
 - [ ] Update `src/tools/browser-javascript.ts`:
-  - [ ] Add memory object to wrapperFunction
-  - [ ] Add registerMemoryMessageHandler()
+  - [ ] Add memory object to wrapperFunction with 6 methods
+  - [ ] Add registerMemoryMessageHandler() for message passing
   - [ ] Add getCurrentSessionId() helper
-  - [ ] Update tool description with new concise version
-  - [ ] Update cleanup to remove memory object
-  - [ ] Remove returnFile functionality
-  - [ ] Remove BrowserJavaScriptToolResult files field
+  - [ ] Update tool description with Skills + Memory sections
+  - [ ] Update cleanup to `delete (window as any).memory`
+  - [ ] Remove returnFile functionality from wrapperFunction
+  - [ ] Update result type to remove files field
 - [ ] Update system prompt (location TBD) with Memory API recognition patterns
-- [ ] Test multi-page navigation scenario
-- [ ] Implement cleanup on session end
+- [ ] Test multi-page navigation scenario with memory persistence

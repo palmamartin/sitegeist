@@ -1,6 +1,8 @@
 import { html, type TemplateResult } from "@mariozechner/mini-lit";
 import type { AgentTool, ToolResultMessage } from "@mariozechner/pi-ai";
-import { type Attachment, i18n, registerToolRenderer, renderHeader, type ToolRenderer } from "@mariozechner/pi-web-ui";
+import { type Attachment, i18n, registerToolRenderer, renderCollapsibleHeader, renderHeader, type ToolRenderer } from "@mariozechner/pi-web-ui";
+import { createRef } from "lit/directives/ref.js";
+import { ref } from "lit/directives/ref.js";
 import { type Static, Type } from "@sinclair/typebox";
 import "@mariozechner/pi-web-ui"; // Ensure all components are registered
 import { Globe } from "lucide";
@@ -757,6 +759,10 @@ export const browserJavaScriptRenderer: ToolRenderer<BrowserJavaScriptParams, Br
 		// Determine status
 		const state = result ? (result.isError ? "error" : "complete") : isStreaming ? "inprogress" : "inprogress";
 
+		// Create refs for collapsible code section
+		const codeContentRef = createRef<HTMLDivElement>();
+		const codeChevronRef = createRef<HTMLSpanElement>();
+
 		// With result: show params + result
 		if (result && params) {
 			const output = result.output || "";
@@ -792,13 +798,15 @@ export const browserJavaScriptRenderer: ToolRenderer<BrowserJavaScriptParams, Br
 			});
 
 			return html`
-				<div class="space-y-3">
-					${renderHeader(state, Globe, params.title)}
-					<code-block .code=${params.code || ""} language="javascript"></code-block>
-					${output ? html`<console-block .content=${output} .variant=${result.isError ? "error" : "default"}></console-block>` : ""}
+				<div>
+					${renderCollapsibleHeader(state, Globe, params.title, codeContentRef, codeChevronRef, false)}
+					<div ${ref(codeContentRef)} class="max-h-0 overflow-hidden transition-all duration-300 space-y-3">
+						<code-block .code=${params.code || ""} language="javascript"></code-block>
+						${output ? html`<console-block .content=${output} .variant=${result.isError ? "error" : "default"}></console-block>` : ""}
+					</div>
 					${
 						attachments.length
-							? html`<div class="flex flex-wrap gap-2">
+							? html`<div class="flex flex-wrap gap-2 mt-3">
 								${attachments.map((att) => html`<attachment-tile .attachment=${att}></attachment-tile>`)}
 							</div>`
 							: ""
@@ -810,9 +818,11 @@ export const browserJavaScriptRenderer: ToolRenderer<BrowserJavaScriptParams, Br
 		// Just params (streaming or waiting for result)
 		if (params) {
 			return html`
-				<div class="space-y-3">
-					${renderHeader(state, Globe, params.title || (isStreaming ? i18n("Writing JavaScript code...") : i18n("Execute JavaScript")))}
-					${params.code ? html`<code-block .code=${params.code} language="javascript"></code-block>` : ""}
+				<div>
+					${renderCollapsibleHeader(state, Globe, params.title || (isStreaming ? i18n("Writing JavaScript code...") : i18n("Execute JavaScript")), codeContentRef, codeChevronRef, false)}
+					<div ${ref(codeContentRef)} class="max-h-0 overflow-hidden transition-all duration-300">
+						${params.code ? html`<code-block .code=${params.code} language="javascript"></code-block>` : ""}
+					</div>
 				</div>
 			`;
 		}
