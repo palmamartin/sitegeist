@@ -238,7 +238,7 @@ export class SkillsTab extends SettingsTab {
 				<div class="space-y-2">
 					<label class="text-sm font-medium text-foreground">Description (Markdown)</label>
 					<textarea
-						class="w-full min-h-[100px] px-3 py-2 text-sm bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+						class="w-full min-h-[100px] px-3 py-2 text-sm text-foreground bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
 						.value=${skill.description}
 						@input=${(e: Event) => this.updateEditField("description", (e.target as HTMLTextAreaElement).value)}
 					></textarea>
@@ -247,7 +247,7 @@ export class SkillsTab extends SettingsTab {
 				<div class="space-y-2">
 					<label class="text-sm font-medium text-foreground">Examples (JavaScript)</label>
 					<textarea
-						class="w-full min-h-[100px] px-3 py-2 text-xs bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring font-mono"
+						class="w-full min-h-[100px] px-3 py-2 text-xs text-foreground bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring font-mono"
 						.value=${skill.examples}
 						@input=${(e: Event) => this.updateEditField("examples", (e.target as HTMLTextAreaElement).value)}
 					></textarea>
@@ -256,7 +256,7 @@ export class SkillsTab extends SettingsTab {
 				<div class="space-y-2">
 					<label class="text-sm font-medium text-foreground">Library Code</label>
 					<textarea
-						class="w-full min-h-[200px] px-3 py-2 text-xs bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring font-mono"
+						class="w-full min-h-[200px] px-3 py-2 text-xs text-foreground bg-background border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring font-mono"
 						.value=${skill.library}
 						@input=${(e: Event) => this.updateEditField("library", (e.target as HTMLTextAreaElement).value)}
 					></textarea>
