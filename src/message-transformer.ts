@@ -114,7 +114,7 @@ export async function browserMessageTransformer(
 
 			transformed.push({
 				role: "user",
-				content: `<browser-context>Navigated to ${nav.title}${tabInfo}: ${nav.url}\n\n${skillsInfo}</browser-context>`,
+				content: `<browser-context>Navigated to ${nav.title}${tabInfo}: ${nav.url}\n\n${skillsInfo}. CONTINUE WITH YOUR TASK!</browser-context>`,
 			} as Message);
 		} else if (m.role === "user") {
 			const { attachments, ...rest } = m as any;

@@ -218,14 +218,14 @@ export const skillTool: AgentTool<typeof skillParamsSchema, any> = {
 					}
 
 					// Validate syntax using sandboxed iframe (CSP-compliant)
-					const validation = await validateJavaScriptSyntax(args.data.library);
+					/*const validation = await validateJavaScriptSyntax(args.data.library);
 					if (!validation.valid) {
 						return {
 							output: `Syntax error in library: ${validation.error}`,
 							isError: true,
 							details: {},
 						};
-					}
+					}*/
 
 					const now = new Date().toISOString();
 					const newSkill: Skill = {

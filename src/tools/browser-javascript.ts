@@ -292,7 +292,7 @@ async function wrapperFunction() {
 						"Execution timeout: Code did not complete within 30 seconds",
 					),
 				);
-			}, 30000) as unknown as number;
+			}, 120000) as unknown as number;
 		});
 
 		// Execute user code and capture the last expression value
