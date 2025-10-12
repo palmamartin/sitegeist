@@ -1,4 +1,5 @@
 import {
+	Badge,
 	DialogBase,
 	DialogContent,
 	DialogHeader,
@@ -380,29 +381,8 @@ export class SitegeistSessionListDialog extends DialogBase {
 						description: i18n("Load a previous conversation"),
 					})}
 
-					<!-- Search bar -->
-					<div class="mt-4">
-						<input
-							type="text"
-							placeholder=${i18n("Search sessions...")}
-							.value=${this.searchQuery}
-							@input=${(e: InputEvent) => {
-								this.searchQuery = (e.target as HTMLInputElement).value;
-							}}
-							class="w-full px-3 py-2 text-sm rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-						/>
-					</div>
-
-					<!-- Stats summary -->
-					<div class="mt-3 px-3 py-2 rounded-md bg-secondary/30 text-xs text-muted-foreground">
-						${i18n("Total: {count} sessions · {messages} messages · ${cost}")
-							.replace("{count}", stats.totalSessions.toString())
-							.replace("{messages}", stats.totalMessages.toString())
-							.replace("{cost}", stats.totalCost.toFixed(4))}
-					</div>
-
 					<!-- Action buttons -->
-					<div class="flex gap-2 mt-3">
+					<div class="flex gap-2 mt-4">
 						<button
 							class="flex-1 px-3 py-2 text-sm font-medium rounded-md border border-border bg-background text-foreground hover:bg-secondary transition-colors"
 							@click=${() => this.handleImport()}
@@ -458,6 +438,30 @@ export class SitegeistSessionListDialog extends DialogBase {
 									: ""
 							}
 						</div>
+					</div>
+
+					<!-- Search bar -->
+					<div class="mt-3">
+						<input
+							type="text"
+							placeholder=${i18n("Search sessions...")}
+							.value=${this.searchQuery}
+							@input=${(e: InputEvent) => {
+								this.searchQuery = (e.target as HTMLInputElement).value;
+							}}
+							class="w-full px-3 py-2 text-sm rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+						/>
+					</div>
+
+					<!-- Stats pills -->
+					<div class="flex items-center gap-2 mt-3">
+						${Badge({ children: `${stats.totalSessions} ${i18n("Sessions").toLowerCase()}`, variant: "secondary" })}
+						${Badge({ children: `${stats.totalMessages} ${i18n("messages")}`, variant: "secondary" })}
+						${Badge({
+							children: `$${stats.totalCost.toFixed(4)}`,
+							variant: "secondary",
+							className: stats.totalCost > 0.01 ? "text-orange-500" : "text-green-600"
+						})}
 					</div>
 
 					<div class="flex-1 overflow-y-auto mt-4 space-y-2">
