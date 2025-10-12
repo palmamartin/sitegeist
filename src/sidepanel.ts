@@ -8,6 +8,7 @@ import {
 	ApiKeysTab,
 	type AppMessage,
 	ChatPanel,
+	createExtractDocumentTool,
 	// PersistentStorageDialog,
 	ProviderTransport,
 	ProxyTab,
@@ -25,6 +26,7 @@ import {
 	type NavigationMessage,
 	registerNavigationRenderer,
 } from "./messages/NavigationMessage.js";
+import { registerUserMessageRenderer } from "./messages/UserMessageRenderer.js";
 import {
 	createWelcomeMessage,
 	registerWelcomeRenderer,
@@ -40,8 +42,97 @@ import "./utils/live-reload.js";
 const welcomeMessages = [
 	{
 		label: "What is Sitegeist?",
-		prompt:
-			"I'm not technical - introduce me to Sitegeist step by step. First, tell me how to make this side panel wider by dragging its left edge - this helps see outputs better. Then start by searching Google for 'best chocolate chip cookie recipe' to show me the basics. CRITICAL: Keep explanations SHORT - 2-3 sentences max per step. I'm learning a completely new tool with no frame of reference, so less is more. After EACH demonstration, you MUST STOP and wait for me to respond. Ask if I have questions and give me clear options for what to do next (like 'try it yourself', 'see the next capability', or 'explore this deeper'). DO NOT continue to the next lesson until I tell you to. When interacting with page elements (clicking, typing, etc.), ALWAYS scroll them into view first so I can see what's happening. Cover these capabilities one at a time: reading web pages, clicking and interacting with sites, extracting information, automating repetitive tasks, and creating useful outputs. If opportunities naturally arise, briefly demonstrate advanced features like: creating interactive HTML tools, reading AND creating PDFs/Word/Excel files, automating YouTube (getting transcripts, comments), or automating WhatsApp - but only if it fits the flow naturally, don't force it. If you create reusable functions for a website, explain that these are called 'skills' and can be saved for future use. Keep examples practical and relatable. Build complexity gradually so I'm never overwhelmed.",
+		prompt: `You are about to help a non-technical user understand Sitegeist through an interactive tutorial. Guide them step-by-step through Sitegeist's capabilities.
+
+**CRITICAL RULES:**
+- Keep explanations SHORT (2-3 sentences max)
+- After EACH step, STOP and wait for them to say continue
+- When clicking or typing, ALWAYS scroll element into view first
+- Never move to next step until they confirm
+
+**START:** First tell them to drag this panel wider by its left edge to see outputs better. STOP and wait for them to confirm.
+
+**PHASE 1: Browse & Extract**
+Step 1: Navigate to google.com, explain what happened. STOP.
+Step 2: Type "chocolate chip cookie recipe" in search box, tell them what happened, ask if they see it. STOP.
+Step 3: Click search button, explain. STOP.
+Step 4: Extract top results using your google search skill (don't explain skills yet), show them the results. STOP.
+
+Then ask if they're ready for Phase 2. STOP.
+
+**PHASE 2: Multi-Step Automation**
+Step 1: Explain that recipe sites are awful (ads everywhere) and manually compiling recipes is tedious. I can navigate multiple sites, collect info, and output clean documents (markdown, PDF, Word, HTML). You'll demonstrate by collecting 2 recipes from top results. STOP.
+Step 2: Wait for their go-ahead, then visit 2 recipe sites, extract data from each, create a markdown artifact with both recipes formatted nicely. Explain each step as you go. STOP.
+
+Then ask if they're ready for Phase 3. STOP.
+
+**PHASE 3: Output Formats**
+Step 1: Explain that now you have the recipe data, you can output in any format they want. STOP.
+Step 2: Create artifacts in this order, explaining each after creation:
+- Markdown (already done)
+- PDF version (STOP after creating)
+- Word document version (STOP after creating)
+- Interactive HTML with ingredient calculator for each recipe (they can input how many cookies they want, ingredients scale automatically) (STOP after creating)
+Step 3: After all artifacts, explain that markdown/HTML are best for iterative work since you can update them fastest (unlike PDF/Word which must be regenerated). STOP.
+
+Then ask if they're ready for Phase 4. STOP.
+
+**PHASE 4: Skills**
+Step 1: Explain that doing everything ad-hoc works but is slow. Better to teach you about a site collaboratively, then save that knowledge as a "skill". Next time that site is visited, you instantly know how to interact with it. (Give relatable example like: "Instead of figuring out Amazon's search every time, a skill remembers it"). STOP.
+Step 2: Demo an existing skill - the YouTube skill. Search for latest Veritasium video, get transcript using YouTube skill, create markdown with video beats (each beat: title, start/end timestamp, summary). STOP.
+
+Then ask if they're ready for Phase 5. STOP.
+
+**PHASE 5: Sky's the Limit**
+Explain that this is just scratching the surface. I can:
+- Research topics/companies/people and compile living dossiers
+- Automate form filling across multiple sites
+- Monitor prices and track changes over time
+- Extract data from dozens of pages automatically
+- Combine data from multiple sources into custom reports
+
+STOP.
+
+**File Attachments:**
+Explain: "I currently can't see images on web pages, but you can attach files to our chat that I can read and work with. This is useful for showing me what you see on a page - just take a screenshot and attach it!"
+
+List what you can work with:
+- **Images/Screenshots**: See what's on your screen, extract text (OCR), describe content, guide interactions
+- **PDFs, Word, Excel**: Read, extract data, cross-reference with web data
+- **Code files**: Analyze any text-based files
+
+Tell them: "Use the attachment button in the chat input to attach files."
+
+STOP.
+
+**Interface Overview:**
+Explain the UI elements:
+
+**Header (top, left to right):**
+- Session history icon → Find and resume old chat sessions
+- New session icon → Start fresh
+- Session title field → Click to rename the current session
+- Theme toggle → Switch between system/light/dark theme
+- Settings icon → Configure API keys, skills, proxy settings
+
+**Message Editor (bottom):**
+- Attachment icon → Attach files to chat
+- Thinking settings (if model supports it) → Off/minimal/low/medium/high. When on, I think before acting, which improves results but takes longer and costs more
+- Model selector → Pick different AI models. If you have Ollama running locally (https://ollama.com), you can select from your local models, so everything is truly local
+- Submit/Stop button → Send message or stop me (can also press ESCAPE key while focused on message editor)
+
+STOP.
+
+**Data Privacy:**
+Explain where data is stored and who gets what:
+- **Settings & API keys**: Stored locally on your computer only
+- **Sessions & attachments**: Stored locally on your computer only
+- **When you send messages**: All text and attachments in the chat session are sent to the LLM provider (default: Anthropic). They're configured to not retain your data or use it for training
+- **CORS proxy** (off by default): If enabled in settings, requests to the LLM go through the proxy. Default is corsproxy.io which does not retain or log data
+
+STOP.
+
+Ask what they'd like to try or explore next.`,
 	},
 	{
 		label: "Research Profile",
@@ -219,6 +310,10 @@ const createAgent = async (
 	const stored = await browserAPI.storage.local.get("debuggerMode");
 	const debuggerModeEnabled = stored.debuggerMode || false;
 
+	// Load CORS proxy settings for extract_document tool
+	const corsProxyEnabled = await storage.settings.get<boolean>("proxy.enabled");
+	const corsProxyUrl = await storage.settings.get<string>("proxy.url");
+
 	const transport = new ProviderTransport();
 
 	agent = new Agent({
@@ -345,7 +440,13 @@ const createAgent = async (
 				agent,
 			);
 
-			const tools: AgentTool<any, any>[] = [navigateTool, browserJavaScriptTool, skillTool];
+			// Create extract_document tool with CORS proxy from settings (loaded above)
+			const extractDocumentTool = createExtractDocumentTool();
+			if (corsProxyEnabled && corsProxyUrl) {
+				extractDocumentTool.corsProxyUrl = `${corsProxyUrl}/?`;
+			}
+
+			const tools: AgentTool<any, any>[] = [navigateTool, browserJavaScriptTool, skillTool, extractDocumentTool];
 
 			// Conditionally add debugger tool if enabled
 			if (debuggerModeEnabled) {
@@ -357,7 +458,7 @@ const createAgent = async (
 		},
 	});
 
-	// Register welcome renderer after agentInterface is available
+	// Register custom message renderers after agentInterface is available
 	if (chatPanel.agentInterface) {
 		registerWelcomeRenderer(agent, chatPanel.agentInterface);
 
@@ -789,5 +890,8 @@ async function initApp() {
 
 	renderApp();
 }
+
+// Register custom user message renderer early, before any session loads
+registerUserMessageRenderer();
 
 initApp();

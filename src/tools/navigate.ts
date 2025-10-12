@@ -154,12 +154,12 @@ CRITICAL: Use this instead of window.location, history.back/forward in browser_j
 				return;
 			}
 
-			// Set up navigation completion listener
+			// Set up DOMContentLoaded listener (fires when DOM is ready, more reliable than onCompleted)
 			const listener = (
 				details: chrome.webNavigation.WebNavigationFramedCallbackDetails,
 			) => {
 				if (details.tabId === tabId && details.frameId === 0) {
-					browser.webNavigation.onCompleted.removeListener(listener);
+					browser.webNavigation.onDOMContentLoaded.removeListener(listener);
 					if (abortListener) signal?.removeEventListener("abort", abortListener);
 					resolve(details.url);
 				}
@@ -167,8 +167,8 @@ CRITICAL: Use this instead of window.location, history.back/forward in browser_j
 
 			// Set up abort listener
 			const abortListener = () => {
-				if (browser.webNavigation?.onCompleted) {
-					browser.webNavigation.onCompleted.removeListener(listener);
+				if (browser.webNavigation?.onDOMContentLoaded) {
+					browser.webNavigation.onDOMContentLoaded.removeListener(listener);
 				}
 				reject(new Error("Aborted"));
 			};
@@ -177,12 +177,12 @@ CRITICAL: Use this instead of window.location, history.back/forward in browser_j
 				signal.addEventListener("abort", abortListener);
 			}
 
-			chrome.webNavigation.onCompleted.addListener(listener);
+			chrome.webNavigation.onDOMContentLoaded.addListener(listener);
 
 			// Trigger navigation
 			browser.tabs.update(tabId, { url }).catch((err: Error) => {
-				if (browser.webNavigation?.onCompleted) {
-					browser.webNavigation.onCompleted.removeListener(listener);
+				if (browser.webNavigation?.onDOMContentLoaded) {
+					browser.webNavigation.onDOMContentLoaded.removeListener(listener);
 				}
 				if (abortListener) signal?.removeEventListener("abort", abortListener);
 				reject(err);

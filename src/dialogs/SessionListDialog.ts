@@ -149,6 +149,143 @@ export class SitegeistSessionListDialog extends DialogBase {
 		);
 	}
 
+	private async handleExport(sessionId?: string) {
+		try {
+			const storage = getAppStorage();
+			if (!storage.sessions) return;
+
+			const allSessions = [];
+
+			if (sessionId) {
+				// Export single session
+				const session = await storage.sessions.loadSession(sessionId);
+				const metadata = this.sessions.find(s => s.id === sessionId);
+				if (session && metadata) {
+					allSessions.push({
+						id: metadata.id,
+						title: metadata.title,
+						lastModified: metadata.lastModified,
+						state: session,
+					});
+				}
+			} else {
+				// Export all sessions
+				for (const metadata of this.sessions) {
+					const session = await storage.sessions.loadSession(metadata.id);
+					if (session) {
+						allSessions.push({
+							id: metadata.id,
+							title: metadata.title,
+							lastModified: metadata.lastModified,
+							state: session,
+						});
+					}
+				}
+			}
+
+			const exportData = {
+				version: 1,
+				exportDate: new Date().toISOString(),
+				sessions: allSessions,
+			};
+
+			const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+				type: "application/json",
+			});
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement("a");
+			a.href = url;
+			const filename = sessionId
+				? `sitegeist-session-${allSessions[0]?.title?.replace(/[^a-z0-9]/gi, '-').toLowerCase() || 'export'}.json`
+				: `sitegeist-sessions-${new Date().toISOString().split("T")[0]}.json`;
+			a.download = filename;
+			a.click();
+			URL.revokeObjectURL(url);
+		} catch (err) {
+			console.error("Failed to export sessions:", err);
+			alert(i18n("Export failed. Check console for details."));
+		}
+	}
+
+	private async handleImport() {
+		try {
+			const input = document.createElement("input");
+			input.type = "file";
+			input.accept = "application/json";
+			input.onchange = async (e: Event) => {
+				const file = (e.target as HTMLInputElement).files?.[0];
+				if (!file) return;
+
+				const text = await file.text();
+				const importData = JSON.parse(text);
+
+				// Handle both array format (legacy) and object format with version
+				let sessionsToImport = [];
+				if (Array.isArray(importData)) {
+					sessionsToImport = importData;
+				} else if (importData.version && importData.sessions) {
+					sessionsToImport = importData.sessions;
+				} else {
+					alert(i18n("Invalid import file format"));
+					return;
+				}
+
+				const storage = getAppStorage();
+				if (!storage.sessions) return;
+
+				// Check for duplicates
+				const existingIds = new Set(this.sessions.map(s => s.id));
+				const duplicates = sessionsToImport.filter((s: any) => existingIds.has(s.id));
+
+				let duplicateAction: 'skip' | 'overwrite' | null = null;
+				if (duplicates.length > 0) {
+					const choice = confirm(
+						i18n(`Found {count} duplicate sessions. Click OK to overwrite, Cancel to skip duplicates.`)
+							.replace("{count}", duplicates.length.toString())
+					);
+					duplicateAction = choice ? 'overwrite' : 'skip';
+				}
+
+				let imported = 0;
+				let skipped = 0;
+				for (const sessionData of sessionsToImport) {
+					try {
+						const isDuplicate = existingIds.has(sessionData.id);
+
+						if (isDuplicate && duplicateAction === 'skip') {
+							skipped++;
+							continue;
+						}
+
+						// Use original ID if not duplicate, or if overwriting
+						await storage.sessions.saveSession(
+							sessionData.id,
+							sessionData.state,
+							undefined,
+							sessionData.title,
+						);
+						imported++;
+					} catch (err) {
+						console.error(`Failed to import session ${sessionData.title}:`, err);
+					}
+				}
+
+				const message = skipped > 0
+					? i18n(`Imported {imported} sessions, skipped {skipped} duplicates`)
+						.replace("{imported}", imported.toString())
+						.replace("{skipped}", skipped.toString())
+					: i18n(`Imported {count} sessions`).replace("{count}", imported.toString());
+
+				alert(message);
+				await this.loadSessionsAndLocks();
+			};
+			input.click();
+		} catch (err) {
+			console.error("Failed to import sessions:", err);
+			alert(i18n("Import failed. Check console for details."));
+		}
+	}
+
 	protected override renderContent() {
 		return html`
 			${DialogContent({
@@ -158,6 +295,21 @@ export class SitegeistSessionListDialog extends DialogBase {
 						title: i18n("Sessions"),
 						description: i18n("Load a previous conversation"),
 					})}
+
+					<div class="flex gap-2 mt-4">
+						<button
+							class="flex-1 px-3 py-2 text-sm font-medium rounded-md border border-border bg-background hover:bg-secondary transition-colors"
+							@click=${() => this.handleImport()}
+						>
+							${i18n("Import")}
+						</button>
+						<button
+							class="flex-1 px-3 py-2 text-sm font-medium rounded-md border border-border bg-background hover:bg-secondary transition-colors"
+							@click=${() => this.handleExport()}
+						>
+							${i18n("Export All")}
+						</button>
+					</div>
 
 					<div class="flex-1 overflow-y-auto mt-4 space-y-2">
 						${
@@ -197,17 +349,33 @@ export class SitegeistSessionListDialog extends DialogBase {
 														${session.messageCount} ${i18n("messages")} · ${formatUsage(session.usage)}
 													</div>
 												</div>
-												<button
-													class="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-destructive/10 text-destructive transition-opacity"
-													@click=${(e: Event) => this.handleDelete(session.id, e)}
-													title=${i18n("Delete")}
-												>
-													<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-														<path d="M3 6h18"></path>
-														<path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
-														<path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
-													</svg>
-												</button>
+												<div class="flex gap-1">
+													<button
+														class="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-secondary text-foreground transition-opacity"
+														@click=${(e: Event) => {
+															e.stopPropagation();
+															this.handleExport(session.id);
+														}}
+														title=${i18n("Export")}
+													>
+														<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+															<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+															<polyline points="7 10 12 15 17 10"></polyline>
+															<line x1="12" y1="15" x2="12" y2="3"></line>
+														</svg>
+													</button>
+													<button
+														class="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-destructive/10 text-destructive transition-opacity"
+														@click=${(e: Event) => this.handleDelete(session.id, e)}
+														title=${i18n("Delete")}
+													>
+														<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+															<path d="M3 6h18"></path>
+															<path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+															<path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+														</svg>
+													</button>
+												</div>
 											</div>
 										`;
 										})
