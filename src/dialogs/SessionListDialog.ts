@@ -310,7 +310,12 @@ export class SitegeistSessionListDialog extends DialogBase {
 
 				let imported = 0;
 				let skipped = 0;
-				for (const { session, metadata } of sessionsToImport) {
+
+				// Set import time to now, with offsets to preserve order
+				const baseTime = new Date();
+
+				for (let i = 0; i < sessionsToImport.length; i++) {
+					const { session, metadata } = sessionsToImport[i];
 					try {
 						const isDuplicate = existingIds.has(metadata.id);
 
@@ -319,11 +324,24 @@ export class SitegeistSessionListDialog extends DialogBase {
 							continue;
 						}
 
-						// Save with metadata ID and session data
+						// Set timestamps to now with offset based on position
+						// First session gets most recent time, subsequent ones get older
+						const offsetSeconds = i * 10; // 10 second intervals
+						const importTime = new Date(baseTime.getTime() - offsetSeconds * 1000);
+						const importTimeISO = importTime.toISOString();
+
+						// Update metadata timestamps
+						const updatedMetadata = {
+							...metadata,
+							lastModified: importTimeISO,
+							createdAt: importTimeISO,
+						};
+
+						// Save with updated metadata
 						await storage.sessions.saveSession(
 							metadata.id,
 							session,
-							metadata,
+							updatedMetadata,
 						);
 						imported++;
 					} catch (err) {
