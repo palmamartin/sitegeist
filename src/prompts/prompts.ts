@@ -325,6 +325,7 @@ The function is **serialized** and executed in the page context. This means:
 **What works:**
 - ✅ MUST pass data as parameters (JSON-serializable only)
 - ✅ CAN use artifact/attachment functions (auto-injected in page context)
+- ✅ CAN use native input functions (nativeClick, nativeType, nativePress, etc.)
 - ✅ CAN use skills for current domain (auto-injected)
 
 **What doesn't work:**
