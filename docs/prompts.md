@@ -93,14 +93,14 @@ Sitegeist-specific prompts:
 - `SYSTEM_PROMPT` - Main agent identity, tone, workflows
 
 **Tool Descriptions**:
-- `REPL_TOOL_DESCRIPTION(runtimeProviderDescriptions)` - Browser REPL with browserjs()/navigate()
+- `REPL_TOOL_DESCRIPTION(runtimeProviderDescriptions)` - REPL with browserjs()/navigate()
 - `SKILL_TOOL_DESCRIPTION` - Skill management (get/list/create/update/rewrite/delete)
 - `NAVIGATE_TOOL_DESCRIPTION` - Navigate to URLs in tabs
 - `ASK_USER_WHICH_ELEMENT_DESCRIPTION` - Element picker
 
 **Runtime Provider Descriptions**:
 - `BROWSERJS_RUNTIME_DESCRIPTION` - `browserjs()` for page context execution
-- `NAVIGATE_RUNTIME_DESCRIPTION` - `navigate()` helper function
+- `NAVIGATE_RUNTIME_DESCRIPTION` - `navigate()` helper function (available in REPL code, not in functions passed to browserjs())
 - `NATIVE_INPUT_EVENTS_DESCRIPTION` - Trusted events: `nativeClick()`, `nativeType()`, `nativePress()`, `nativeKeyDown()`, `nativeKeyUp()`
 
 ## Implementation Details

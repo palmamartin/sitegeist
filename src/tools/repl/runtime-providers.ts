@@ -196,10 +196,14 @@ export class BrowserJsRuntimeProvider implements SandboxRuntimeProvider {
 					  }
 					| undefined;
 
+				// Get console output from the dedicated ConsoleRuntimeProvider for this execution
+				const consoleLogs = pageConsoleProvider.getLogs();
+
 				if (!result) {
 					respond({
-						success: false,
+						success: true,
 						error: "No result returned from script execution",
+						console: consoleLogs,
 					});
 					return;
 				}
@@ -209,12 +213,10 @@ export class BrowserJsRuntimeProvider implements SandboxRuntimeProvider {
 						success: false,
 						error: result.error,
 						stack: result.stack,
+						console: consoleLogs,
 					});
 					return;
 				}
-
-				// Get console output from the dedicated ConsoleRuntimeProvider for this execution
-				const consoleLogs = pageConsoleProvider.getLogs();
 
 				respond({
 					success: true,

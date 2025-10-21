@@ -37,6 +37,12 @@ This will:
 - Watch and rebuild Tailwind CSS
 - Run hot reload server on port 8765
 
+```bash
+./check.sh
+```
+
+Linting and type checking. A precommit hook also executes this and will prevent checking in broken code.
+
 ### Building
 
 Build for specific browser:
