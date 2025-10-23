@@ -112,19 +112,10 @@ async function startServer() {
 		}
 	});
 
-	// Graceful shutdown
+	// Instant shutdown for fast redeploys
 	const shutdown = () => {
-		console.log("\n✓ Shutting down gracefully...");
-		server.close(() => {
-			console.log("✓ Server closed");
-			process.exit(0);
-		});
-
-		// Force shutdown after 5 seconds
-		setTimeout(() => {
-			console.error("✗ Forced shutdown");
-			process.exit(1);
-		}, 5000);
+		console.log("\n✓ Shutting down...");
+		process.exit(0);
 	};
 
 	process.on("SIGTERM", shutdown);
