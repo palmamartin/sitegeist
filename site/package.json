@@ -19,7 +19,7 @@
 		"iron-session": "^8.0.4"
 	},
 	"devDependencies": {
-		"@mariozechner/mini-lit": "file:../../mini-lit",
+		"@mariozechner/mini-lit": "0.1.10",
 		"@vaadin/router": "^2.0.0",
 		"lit": "^3.2.1",
 		"three": "^0.180.0",

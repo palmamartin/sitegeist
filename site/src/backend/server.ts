@@ -70,7 +70,7 @@ async function startServer() {
 		app.use(express.static(staticPath));
 
 		// Admin SPA fallback
-		app.get("/admin*", (_req, res) => {
+		app.get(/^\/admin(\/.*)?$/, (_req, res) => {
 			res.sendFile(path.join(staticPath, "admin/index.html"));
 		});
 
