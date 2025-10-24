@@ -1,4 +1,4 @@
-import { html } from "@mariozechner/mini-lit";
+import { html, Select, type SelectOption } from "@mariozechner/mini-lit";
 import { SettingsTab } from "@mariozechner/pi-web-ui";
 import { Chart, type ChartConfiguration, registerables } from "chart.js";
 import type { PropertyValues } from "lit";
@@ -9,10 +9,8 @@ Chart.register(...registerables);
 
 export class CostsTab extends SettingsTab {
 	label = "Costs";
+	private dateRange: "today" | "week" | "30days" | "90days" | "alltime" = "30days";
 	private totalCost = 0;
-	private monthCost = 0;
-	private weekCost = 0;
-	private todayCost = 0;
 	private loading = true;
 	private lineChart?: Chart;
 	private providerChart?: Chart;
@@ -47,31 +45,70 @@ export class CostsTab extends SettingsTab {
 		}
 	}
 
+	async handleDateRangeChange(newRange: "today" | "week" | "30days" | "90days" | "alltime") {
+		this.dateRange = newRange;
+		this.loading = true;
+		this.requestUpdate();
+
+		// Destroy existing charts
+		if (this.lineChart) {
+			this.lineChart.destroy();
+			this.lineChart = undefined;
+		}
+		if (this.providerChart) {
+			this.providerChart.destroy();
+			this.providerChart = undefined;
+		}
+
+		await this.loadCosts();
+		// Charts will be re-rendered via updated() lifecycle
+	}
+
 	async loadCosts() {
 		const storage = getSitegeistStorage();
 
 		try {
-			// Calculate date ranges
 			const now = new Date();
 			const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-			const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-			const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-			// Fetch aggregated data
-			this.totalCost = await storage.costs.getTotalCost();
+			// Calculate date range based on selection
+			let startDate: Date;
+			switch (this.dateRange) {
+				case "today":
+					startDate = today;
+					break;
+				case "week":
+					startDate = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+					break;
+				case "30days":
+					startDate = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+					break;
+				case "90days":
+					startDate = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000);
+					break;
+				case "alltime":
+					startDate = new Date(0); // Unix epoch
+					break;
+			}
 
-			const weekCosts = await storage.costs.getCostsByDateRange(weekAgo, now);
-			this.weekCost = weekCosts.reduce((sum, e) => sum + e.total, 0);
+			// Fetch costs for the selected date range
+			const costs = await storage.costs.getCostsByDateRange(startDate, now);
+			this.totalCost = costs.reduce((sum, e) => sum + e.total, 0);
 
-			const monthCosts = await storage.costs.getCostsByDateRange(monthAgo, now);
-			this.monthCost = monthCosts.reduce((sum, e) => sum + e.total, 0);
+			// Calculate provider and model breakdowns for the date range
+			this.byProvider = {};
+			this.byModel = {};
+			for (const day of costs) {
+				for (const [provider, models] of Object.entries(day.byProvider)) {
+					const providerTotal = Object.values(models).reduce((sum, cost) => sum + cost, 0);
+					this.byProvider[provider] = (this.byProvider[provider] || 0) + providerTotal;
 
-			const todayCosts = await storage.costs.getCostsByDateRange(today, now);
-			this.todayCost = todayCosts.reduce((sum, e) => sum + e.total, 0);
-
-			// Get provider and model breakdowns
-			this.byProvider = await storage.costs.getCostsByProvider();
-			this.byModel = await storage.costs.getCostsByModel();
+					for (const [modelId, cost] of Object.entries(models)) {
+						const key = `${provider}:${modelId}`;
+						this.byModel[key] = (this.byModel[key] || 0) + cost;
+					}
+				}
+			}
 		} catch (err) {
 			console.error("Failed to load costs:", err);
 		} finally {
@@ -84,39 +121,90 @@ export class CostsTab extends SettingsTab {
 		const storage = getSitegeistStorage();
 
 		try {
-			// Get daily costs for last 30 days
-			const allDays = await storage.costs.getAll();
-			const last30Days = allDays.slice(0, 30).reverse(); // Most recent 30, chronological order
+			// Get daily costs based on selected date range
+			const now = new Date();
+			const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+			let startDate: Date;
+			switch (this.dateRange) {
+				case "today":
+					startDate = today;
+					break;
+				case "week":
+					startDate = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+					break;
+				case "30days":
+					startDate = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+					break;
+				case "90days":
+					startDate = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000);
+					break;
+				case "alltime":
+					startDate = new Date(0);
+					break;
+			}
 
-			// Line chart: daily costs
+			const costs = await storage.costs.getCostsByDateRange(startDate, now);
+			const dailyCosts = costs.reverse(); // Chronological order (oldest to newest)
+
+			// Stacked bar chart: daily costs by provider/model
 			const lineCanvas = this.querySelector("#line-chart") as HTMLCanvasElement | null;
 			if (lineCanvas) {
+				// Collect all unique provider:model combinations across all days
+				const modelKeys = new Set<string>();
+				for (const day of dailyCosts) {
+					for (const [provider, models] of Object.entries(day.byProvider)) {
+						for (const modelId of Object.keys(models)) {
+							modelKeys.add(`${provider}:${modelId}`);
+						}
+					}
+				}
+
+				// Color palette for different models
+				const colors = [
+					"rgb(99, 102, 241)", // indigo
+					"rgb(244, 63, 94)", // rose
+					"rgb(34, 197, 94)", // green
+					"rgb(251, 146, 60)", // orange
+					"rgb(168, 85, 247)", // purple
+					"rgb(14, 165, 233)", // sky
+					"rgb(234, 179, 8)", // yellow
+					"rgb(236, 72, 153)", // pink
+				];
+
+				// Create dataset for each model
+				const datasets = Array.from(modelKeys).map((modelKey, index) => {
+					const [provider, modelId] = modelKey.split(":");
+					return {
+						label: modelKey,
+						data: dailyCosts.map((day) => day.byProvider[provider]?.[modelId] || 0),
+						backgroundColor: colors[index % colors.length],
+					};
+				});
+
 				const lineConfig: ChartConfiguration = {
-					type: "line",
+					type: "bar",
 					data: {
-						labels: last30Days.map((d) => {
+						labels: dailyCosts.map((d) => {
 							const date = new Date(d.date);
 							return `${date.getMonth() + 1}/${date.getDate()}`;
 						}),
-						datasets: [
-							{
-								label: "Daily Cost ($)",
-								data: last30Days.map((d) => d.total),
-								borderColor: "rgb(99, 102, 241)",
-								backgroundColor: "rgba(99, 102, 241, 0.1)",
-								tension: 0.4,
-								fill: true,
-							},
-						],
+						datasets,
 					},
 					options: {
 						responsive: true,
 						maintainAspectRatio: false,
 						plugins: {
-							legend: { display: false },
+							legend: {
+								display: true,
+								position: "bottom",
+							},
 						},
 						scales: {
+							x: {
+								stacked: true,
+							},
 							y: {
+								stacked: true,
 								beginAtZero: true,
 								ticks: {
 									callback: (value) => `$${value}`,
@@ -174,31 +262,48 @@ export class CostsTab extends SettingsTab {
 		// Sort models by cost (descending)
 		const sortedModels = Object.entries(this.byModel).sort((a, b) => b[1] - a[1]);
 
+		// Date range labels
+		const dateRangeLabels = {
+			today: "Today",
+			week: "Last 7 Days",
+			"30days": "Last 30 Days",
+			"90days": "Last 90 Days",
+			alltime: "All Time",
+		};
+
+		// Date range options for Select component
+		const dateRangeOptions: SelectOption[] = [
+			{ value: "today", label: "Today" },
+			{ value: "week", label: "Last 7 Days" },
+			{ value: "30days", label: "Last 30 Days" },
+			{ value: "90days", label: "Last 90 Days" },
+			{ value: "alltime", label: "All Time" },
+		];
+
 		return html`
 			<div class="space-y-6">
-				<!-- Summary Cards -->
-				<div class="grid grid-cols-2 gap-4">
-					<div class="p-4 rounded-lg border border-border bg-background">
-						<div class="text-sm text-muted-foreground">Total (All Time)</div>
-						<div class="text-2xl font-bold text-foreground">$${this.totalCost.toFixed(4)}</div>
-					</div>
-					<div class="p-4 rounded-lg border border-border bg-background">
-						<div class="text-sm text-muted-foreground">This Month</div>
-						<div class="text-2xl font-bold text-foreground">$${this.monthCost.toFixed(4)}</div>
-					</div>
-					<div class="p-4 rounded-lg border border-border bg-background">
-						<div class="text-sm text-muted-foreground">This Week</div>
-						<div class="text-2xl font-bold text-foreground">$${this.weekCost.toFixed(4)}</div>
-					</div>
-					<div class="p-4 rounded-lg border border-border bg-background">
-						<div class="text-sm text-muted-foreground">Today</div>
-						<div class="text-2xl font-bold text-foreground">$${this.todayCost.toFixed(4)}</div>
-					</div>
+				<!-- Date Range Selector -->
+				<div class="flex items-center gap-4">
+					<label class="text-sm font-medium text-foreground">Date Range:</label>
+					${Select({
+						value: this.dateRange,
+						options: dateRangeOptions,
+						onChange: (value) => {
+							this.handleDateRangeChange(value as typeof this.dateRange);
+						},
+						size: "md",
+					})}
 				</div>
 
-				<!-- Line Chart -->
+				<!-- Summary Card -->
 				<div class="p-4 rounded-lg border border-border bg-background">
-					<h3 class="text-sm font-medium mb-4">Daily Costs (Last 30 Days)</h3>
+					<div class="text-sm text-muted-foreground">${dateRangeLabels[this.dateRange]}</div>
+					<div class="text-2xl font-bold text-foreground">$${this.totalCost.toFixed(4)}</div>
+				</div>
+
+				<!-- Stacked Bar Chart -->
+				<div class="p-4 rounded-lg border border-border bg-background">
+					<h3 class="text-sm font-medium mb-4">Daily Costs by Model</h3>
 					<div style="height: 200px">
 						<canvas id="line-chart"></canvas>
 					</div>
