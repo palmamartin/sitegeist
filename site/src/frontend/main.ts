@@ -101,3 +101,26 @@ if (ctaWordElement) {
 		}, 300);
 	}, 2000);
 }
+
+// FAQ accordion functionality
+document.addEventListener("DOMContentLoaded", () => {
+	const faqToggles = document.querySelectorAll(".faq-toggle");
+
+	faqToggles.forEach((toggle) => {
+		toggle.addEventListener("click", () => {
+			const content = toggle.nextElementSibling as HTMLElement;
+			const chevron = toggle.querySelector(".faq-chevron") as SVGElement;
+			const isOpen = content.style.maxHeight && content.style.maxHeight !== "0px";
+
+			if (isOpen) {
+				// Close
+				content.style.maxHeight = "0px";
+				chevron.style.transform = "rotate(0deg)";
+			} else {
+				// Open
+				content.style.maxHeight = content.scrollHeight + "px";
+				chevron.style.transform = "rotate(180deg)";
+			}
+		});
+	});
+});
