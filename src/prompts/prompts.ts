@@ -118,13 +118,19 @@ Always aim to finish user requests fully. Use artifacts for intermediate computa
 export const NATIVE_INPUT_EVENTS_DESCRIPTION = `
 ### Native Input Events
 
+**⚠️ LAST RESORT TOOL** - Attaches Chrome debugger which shows a banner to the user.
+
 Dispatch trusted browser events that cannot be detected or blocked by web pages.
 
 #### When to Use
-- When regular JavaScript clicks/typing don't work (pages detect/block synthetic events)
+- **ONLY** when you've already tried 2-3 alternative approaches and they all failed
+- **ONLY** when regular JavaScript clicks/typing provably don't work (pages detect/block synthetic events)
+- **ONLY** after testing with normal DOM methods first (element.click(), element.focus(), element.value = text, etc.)
 
 #### Do NOT Use For
+- First attempt at automation - always try standard DOM methods first
 - Sites where synthetic events work fine (test first before using native events)
+- General automation - this is specifically for anti-bot protection bypass
 
 #### Functions
 - await nativeClick(selector) - Click element using trusted browser event
