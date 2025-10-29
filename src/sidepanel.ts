@@ -357,6 +357,10 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 				agent.appendMessage(navMessage);
 			}
 		},
+		onCostClick: () => {
+			if (!agent) return;
+			SessionCostDialog.open(agent.state.messages);
+		},
 		toolsFactory: (_agent, _agentInterface, _artifactsPanel, runtimeProvidersFactory) => {
 			const navigateTool = new NavigateTool();
 			const selectElementTool = new AskUserWhichElementTool();
