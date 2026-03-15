@@ -470,7 +470,16 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 				openApiKeysDialog();
 				return;
 			}
-			ModelSelector.open(agent.state.model, (model) => agent.setModel(model), providers);
+			ModelSelector.open(
+				agent.state.model,
+				(model) => {
+					agent.setModel(model);
+					chatPanel.agentInterface?.requestUpdate();
+					updateAuthLabel().catch(() => {});
+					renderApp();
+				},
+				providers,
+			);
 		},
 		onBeforeSend: async () => {
 			if (!agent) return;
