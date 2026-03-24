@@ -41,7 +41,8 @@ import {
 } from "./messages/NavigationMessage.js";
 import { registerUserMessageRenderer } from "./messages/UserMessageRenderer.js";
 import { createWelcomeMessage, registerWelcomeRenderer } from "./messages/WelcomeMessage.js";
-import { isOAuthCredentials, resolveApiKey } from "./oauth/index.js";
+import { getGitHubCopilotBaseUrl } from "./oauth/github-copilot.js";
+import { isOAuthCredentials, parseOAuthCredentials, resolveApiKey } from "./oauth/index.js";
 import { SYSTEM_PROMPT } from "./prompts/prompts.js";
 import { SitegeistAppStorage } from "./storage/app-storage.js";
 import { DebuggerTool } from "./tools/debugger.js";
@@ -388,11 +389,33 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 		},
 		convertToLlm: browserMessageTransformer,
 		toolExecution: "sequential",
-		streamFn: createStreamFn(async () => {
-			const enabled = await storage.settings.get<boolean>("proxy.enabled");
-			if (!enabled) return undefined;
-			return (await storage.settings.get<string>("proxy.url")) || undefined;
-		}),
+		streamFn: (() => {
+			const baseStreamFn = createStreamFn(async () => {
+				const enabled = await storage.settings.get<boolean>("proxy.enabled");
+				if (!enabled) return undefined;
+				return (await storage.settings.get<string>("proxy.url")) || undefined;
+			});
+
+			return async (
+				model: Parameters<typeof baseStreamFn>[0],
+				context: Parameters<typeof baseStreamFn>[1],
+				options?: Parameters<typeof baseStreamFn>[2],
+			) => {
+				// For github-copilot, update baseUrl from token's proxy-ep
+				if (model.provider === "github-copilot") {
+					const stored = await storage.providerKeys.get("github-copilot");
+					if (stored && isOAuthCredentials(stored)) {
+						const creds = parseOAuthCredentials(stored);
+						const baseUrl = getGitHubCopilotBaseUrl(creds.access);
+						if (baseUrl !== model.baseUrl) {
+							model = { ...model, baseUrl };
+						}
+					}
+				}
+
+				return baseStreamFn(model, context, options);
+			};
+		})(),
 		getApiKey: async (provider: string) => {
 			const stored = await storage.providerKeys.get(provider);
 			if (!stored) return undefined;
